@@ -1,25 +1,30 @@
 import React from 'react';
+import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import { Provider } from 'react-redux';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { store } from './store';
 import GlobalStyle from './styles/globalStyles';
 import Home from './pages/Home';
-import Login from './pages/Login';
-import UserCalendar from './pages/UserCalendar';
-import MyCalendar from './components/calendar'; // Import Calendar component
+import MasterSchedule from './components/schedule/MasterSchedule';
+import Users from './components/users/Users';
+import Groups from './components/groups/groups';
+import SideMenu from './components/sidemenu';
+import Actors from './components/actors/actors';
 
 const App: React.FC = () => {
   return (
     <Provider store={store}>
       <Router>
         <GlobalStyle />
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/home" element={<Home />} />
-          <Route path="/userCalendar" element={<UserCalendar />} />
-          <Route path="/calendar" element={< MyCalendar/>} />
-          <Route path="/" element={<Home />} /> {/* Default route */}
-        </Routes>
+        <SideMenu />
+        <div className="main-content">
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/schedule" element={<MasterSchedule />} />
+            <Route path="/users" element={<Users />} />
+            <Route path="/actors" element={<Actors />} />
+            <Route path="/groups" element={<Groups />} />
+          </Routes>
+        </div>
       </Router>
     </Provider>
   );

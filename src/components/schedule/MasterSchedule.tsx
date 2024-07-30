@@ -1,9 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import AddTaskModal from './AddTaskModal';
-import { db } from '../../utils/firebase';
 import { collection, onSnapshot, QuerySnapshot, getDocs } from 'firebase/firestore';
+import { db } from '../../utils/firebase';
+import AddTaskModal from './AddTaskModal';
+import GroupToggle from './GroupToggle';
+import { Calendar, momentLocalizer, Event } from 'react-big-calendar';
+import moment from 'moment';
+import 'react-big-calendar/lib/css/react-big-calendar.css';
 
-// Define the Task and Person types
+const localizer = momentLocalizer(moment);
+
 interface Task {
   id: string;
   name: string;
@@ -12,94 +17,88 @@ interface Task {
   participants: string[];
 }
 
-interface Person {
+interface Participant {
+  id: string;
   name: string;
-  isVisible: boolean;
+  type: 'actor' | 'group';
 }
 
 const MasterSchedule: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [people, setPeople] = useState<Person[]>([]);
+  const [actors, setActors] = useState<Participant[]>([]);
+  const [groups, setGroups] = useState<Participant[]>([]);
+  const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
 
   useEffect(() => {
-    // Create a reference to the tasks collection
-    const tasksCollection = collection(db, 'tasks');
+    const fetchActors = async () => {
+      const actorsCollection = collection(db, 'actors');
+      const actorsSnapshot = await getDocs(actorsCollection);
+      const actorsList = actorsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        name: doc.data().name,
+        type: 'actor' as const,
+      }));
+      setActors(actorsList);
+    };
 
-    // Set up a listener for real-time updates
+    const fetchGroups = async () => {
+      const groupsCollection = collection(db, 'groups');
+      const groupsSnapshot = await getDocs(groupsCollection);
+      const groupsList = groupsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        name: doc.data().name,
+        type: 'group' as const,
+      }));
+      setGroups(groupsList);
+    };
+
+    fetchActors();
+    fetchGroups();
+  }, []);
+
+  useEffect(() => {
+    const tasksCollection = collection(db, 'tasks');
     const unsubscribe = onSnapshot(tasksCollection, (snapshot: QuerySnapshot) => {
       const tasksData: Task[] = snapshot.docs.map(doc => ({
         id: doc.id,
-        ...(doc.data() as Omit<Task, 'id'>) // Spread the document data
+        ...(doc.data() as Omit<Task, 'id'>),
       }));
       setTasks(tasksData);
-    }, (error) => {
-      console.error("Error listening to tasks: ", error);
     });
 
-    // Clean up the listener on component unmount
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    // Fetch people from Firestore
-    const fetchPeople = async () => {
-      const peopleCollection = collection(db, 'people');
-      const snapshot = await getDocs(peopleCollection);
-      const peopleData = snapshot.docs.map(doc => ({
-        name: doc.id,
-        isVisible: true // Initially, all people are visible
-      }));
-      setPeople(peopleData);
-    };
-
-    fetchPeople();
-  }, []);
-
-  const togglePersonVisibility = (name: string) => {
-    setPeople(prevPeople =>
-      prevPeople.map(person =>
-        person.name === name
-          ? { ...person, isVisible: !person.isVisible }
-          : person
-      )
-    );
-  };
-
   const filteredTasks = tasks.filter(task =>
-    task.participants.some(participant =>
-      people.find(person => person.name === participant)?.isVisible
-    )
+    selectedParticipants.length === 0 ||
+    task.participants.some(participant => selectedParticipants.includes(participant))
   );
+
+  const events: Event[] = filteredTasks.map(task => ({
+    id: task.id,
+    title: task.name,
+    start: new Date(task.date),
+    end: new Date(task.date),
+    resource: task,
+  }));
 
   return (
     <div>
       <h1>Master Schedule</h1>
       <button onClick={() => setIsModalOpen(true)}>Add New Task</button>
-      <div>
-        {people.map(person => (
-          <div key={person.name}>
-            <label>
-              <input
-                type="checkbox"
-                checked={person.isVisible}
-                onChange={() => togglePersonVisibility(person.name)}
-              />
-              {person.name}
-            </label>
-          </div>
-        ))}
-      </div>
-      <div>
-        {filteredTasks.map(task => (
-          <div key={task.id}>
-            <h3>{task.name}</h3>
-            <p>{task.location}</p>
-            <p>{task.date}</p>
-            <p>Participants: {task.participants.join(', ')}</p>
-          </div>
-        ))}
-      </div>
+      <GroupToggle
+        participants={[...actors, ...groups]}
+        selectedParticipants={selectedParticipants}
+        onParticipantsChange={setSelectedParticipants}
+      />
+      <Calendar
+        localizer={localizer}
+        events={events}
+        startAccessor="start"
+        endAccessor="end"
+        style={{ height: 500 }}
+      />
       {isModalOpen && <AddTaskModal onClose={() => setIsModalOpen(false)} />}
     </div>
   );
